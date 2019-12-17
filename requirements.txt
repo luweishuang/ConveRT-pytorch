@@ -3,3 +3,8 @@ tqdm
 sklearn
 tensorboard
 
+# for development
+black
+flake8
+isort
+pytest

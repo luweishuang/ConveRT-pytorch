@@ -8,3 +8,4 @@ black
 flake8
 isort
 pytest
+sphinx

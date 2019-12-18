@@ -1,5 +1,5 @@
 import math
-from typing import NamedTuple, Optional
+from typing import NamedTuple, Optional, Union, Tuple
 
 import torch
 import torch.nn as nn
@@ -101,6 +101,11 @@ class ConveRTEmbedding(nn.Module):
 
 class ConveRTEncoderLayer(nn.Module):
     def __init__(self, config: ConveRTModelConfig):
+        """[summary]
+        
+        :param config: model config
+        :type config: ConveRTModelConfig
+        """
         super().__init__()
         # TODO: relative position self attention
         self.self_attention = SelfAttention(config)
@@ -125,13 +130,42 @@ class ConveRTEncoderLayer(nn.Module):
 
 
 class ConveRTSharedEncoder(nn.Module):
-    def __init__(self, config):
+    """ Shared(context, reply) encoder for generate sentence representation.
+        This shared encoder will be used in ConveRTEncoder.__init__ input argument. 
+        
+        SharedEncoder is consisted with under layers.
+
+        1. sub-word + positional embedding layer
+        2. multi-layer (6-layers on paper) ConveRTEncoderLayer (transformer block)
+        3. 2-head self-attention layer
+
+        It doesn't forward feed-forward-2 as described in paper figure 2. 
+    """
+
+    def __init__(self, config: ConveRTModelConfig):
+        """ initialize model with config value
+
+        :param config: model config
+        :type config: ConveRTModelConfig
+        """
         super().__init__()
         self.embedding = ConveRTEmbedding(config)
         self.encoder_layers = nn.ModuleList([ConveRTEncoderLayer(config) for _ in range(config.num_encoder_layers)])
         self.two_head_self_attn = MultiheadAttention(config.num_embed_hidden, 2, dropout=config.dropout_rate)
 
-    def forward(self, encoder_input: EncoderInput):
+    def forward(self, encoder_input: EncoderInput) -> torch.Tensor:
+        """ Make sentence representation with under procedure
+
+        1. pass to sub-word embedding (subword and positional)
+        2. pass to mulit-layer transformer block
+        3. pass to 2-head self-attention layer
+
+        :param encoder_input: raw encoder inputs (EncoderInput.input_ids, EncoderInput.position_ids etc..)
+        :type encoder_input: EncoderInput
+        :return: sentence representation (which didn't pass through fead-forward-2 layer)
+        :rtype: torch.Tensor
+        """
+
         # calculate transformer input embedding
         embed = self.embedding.forward(encoder_input.input_ids, encoder_input.position_ids)
 
@@ -148,15 +182,42 @@ class ConveRTSharedEncoder(nn.Module):
 
 
 class ConveRTEncoder(nn.Module):
-    def __init__(self, config, shared_encoder: ConveRTSharedEncoder):
+    """ Seperated(context, reply) encoder for making sentence representation. Encoder is consisted with under layers.
+
+    1. shared_encoder (shared with context, reply encoder)
+    2. fead_forward (feed-forward-2 layer on figure 2 3-layer fully connected feed forward net)
+    """
+
+    def __init__(self, config: ConveRTModelConfig, shared_encoder: ConveRTSharedEncoder):
+        """ Initialize model with config value
+        Additionally, shared_encoder which is initialized seperately, should be pass through the argument.
+
+        :param config: model config
+        :type config: ConveRTModelConfig
+        :param shared_encoder: shared encoder model for making sentence representation before fead-forward-2
+        :type shared_encoder: ConveRTSharedEncoder
+        """
         super().__init__()
+
         self.shared_encoder: ConveRTSharedEncoder = shared_encoder
         # todo: check linear dimension size
         self.feed_forward = ConveRTOuterFeedForward(
             config.num_embed_hidden, config.feed_forward2_hidden, config.dropout_rate
         )
 
-    def forward(self, encoder_input: EncoderInput):
+    def forward(self, encoder_input: EncoderInput) -> torch.Tensor:
+        """ Make each sentence representation (context, reply) by following procedure.
+
+        1. pass through shared encoder -> 1-step sentence represnetation
+        2. summation each sequence output into single sentence representation (SEQ_LEN, HIDDEN) -> (HIDDEN)
+        3. normalize sentence representation with each sequence length (reduce reduction problem of diffrent sentence length)
+        4. pass throught the feed-foward-2 layer which has independent weight by context and reply encoder part.
+
+        :param encoder_input: raw model input (EncoderInput.input_ids, EncoderInput.position_ids, etc)
+        :type encoder_input: EncoderInput
+        :return: sentence representation about the context or reply
+        :rtype: torch.Tensor
+        """
         shared_encoder_output = self.shared_encoder.forward(encoder_input)
         sumed_word_representations = shared_encoder_output.sum(1)
 
@@ -168,21 +229,78 @@ class ConveRTEncoder(nn.Module):
 
 
 class ConveRTDualEncoder(nn.Module):
+    """ DualEncoder calculate similairty between context and reply by dot-product.
+
+    DualEncoder is consisted with under models
+    1. shared_encoder (shared with context, reply encoder)
+    2. context_encoder (sentence representation encoder for context input)
+    3. reply_encoder (sentence representation encoder for reply input)
+    """
+
     def __init__(self, config: ConveRTModelConfig):
+        """ Initialize model with config value
+        shared_encoder is created in __init__ with ConveRTModelConfig and distributed to each encoder. 
+
+        :param config: [description]
+        :type config: ConveRTModelConfig
+        """
         super().__init__()
         self.shared_encoder = ConveRTSharedEncoder(config)
         self.context_encoder = ConveRTEncoder(config, self.shared_encoder)
         self.reply_encoder = ConveRTEncoder(config, self.shared_encoder)
 
-    def forward(self, context_input: EncoderInput, reply_input: EncoderInput):
+    def forward(
+        self,
+        context_input: EncoderInput,
+        reply_input: EncoderInput,
+        use_softmax: bool = False,
+        with_embed: bool = False,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """ calculate similarity matrix (CONTEXT_BATCH_SIZE, REPLY_BATCH_SIZE) between context and reply
+        
+        :param context_input: raw context encoder input
+        :type context_input: EncoderInput
+        :param reply_input: raw reply encoder input
+        :type reply_input: EncoderInput
+        :param use_softmax: apply softmax on similarity matrix or not, defaults to False
+        :type use_softmax: bool, optional
+        :param with_embed: return embedding value or not, defaults to False
+        :type with_embed: bool, optional
+        :return: (CONTEXT_BATCH_SIZE, REPLY_BATCH_SIZE) size of similarity_matrix + (context_embed, reply_embed)
+        :rtype: -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
         context_embed = self.context_encoder.forward(context_input)
         reply_embed = self.reply_encoder.forward(reply_input)
+        cosine_sim = self.calculate_similarity(context_embed, reply_embed, use_softmax)
+        return (cosine_sim, context_embed, reply_embed) if with_embed else cosine_sim
 
+    def calculate_similarity(
+        self, context_embed: torch.Tensor, reply_embed: torch.Tensor, use_softmax: bool = False
+    ) -> torch.Tensor:
+        """ calculate similairty between two matrix using dot-product
+        
+        :param context_embed: context representation (BATCH, HIDDEN_DIM)
+        :type context_embed: torch.Tensor
+        :param reply_embed: reply representation (BATCH, HIDDEN_DIM)
+        :type reply_embed: torch.Tensor
+        :param use_softmax: apply softmax on similarity matrix or not, defaults to False
+        :type use_softmax: bool, optional
+        :return: dot-product output of two matrix
+        :rtype: torch.Tensor
+        """
+        # TODO : Scaled-Dot Product
         cosine_similarity = torch.matmul(context_embed, reply_embed.transpose(-1, -2))
-        return cosine_similarity
+        return fnn.softmax(cosine_similarity, dim=-1) if use_softmax else cosine_similarity
 
-    def calculate_loss(self, cosine_similarity: torch.FloatTensor):
+    def calculate_loss(self, cosine_similarity: torch.FloatTensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """ calculate context-reply matching loss with categorical-cross entropy.
+
+        :param cosine_similarity: cosine similairty matrix (CONTEXT_BATCH_SIZE, REPLY_BATCH_SIZE)
+        :type cosine_similarity: torch.FloatTensor
+        :return: backward available loss and accuracy
+        :rtype: torch.Tensor, torch.Tensor
+        """
         label = torch.arange(cosine_similarity.size(0), device=cosine_similarity.device)
         loss = fnn.cross_entropy(cosine_similarity, label)
-        acc = cosine_similarity.argmax(-1).eq(label).float().sum() / label.size(0)
-        return {"loss": loss, "acc": acc}
+        accuracy = cosine_similarity.argmax(-1).eq(label).float().sum() / label.size(0)
+        return loss, accuracy

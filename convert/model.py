@@ -18,7 +18,13 @@ class EncoderInput(NamedTuple):
 
 
 class SelfAttention(nn.Module):
+    """normal query, key, value based self attention """
     def __init__(self, config: ConveRTModelConfig):
+        """init self attention weight of each key, query, value and output projection layer.
+        
+        :param config: model config
+        :type config: ConveRTModelConfig
+        """
         super().__init__()
 
         self.config = config
@@ -30,6 +36,20 @@ class SelfAttention(nn.Module):
         self.output_projection = nn.Linear(config.num_attention_project, config.num_embed_hidden)
 
     def forward(self, query, attention_mask=None, return_attention=False):
+        """ calculate self-attention of query, key and weighted to value at the end.
+        self-attention input is projected by linear layer at the first time.
+        applying attention mask for ignore pad index attention weight.
+        return value after apply output projection layer to value * attention
+        
+        :param query: [description]
+        :type query: [type]
+        :param attention_mask: [description], defaults to None
+        :type attention_mask: [type], optional
+        :param return_attention: [description], defaults to False
+        :type return_attention: bool, optional
+        :return: [description]
+        :rtype: [type]
+        """
         _query = self.query.forward(query)
         _key = self.key.forward(query)
         _value = self.value.forward(query)
@@ -52,20 +72,50 @@ class SelfAttention(nn.Module):
 
 
 class ConveRTInnerFeedForward(nn.Module):
-    def __init__(self, input_hidden, intermediate_hidden, dropout_rate: float = None):
+    """ 2-layer fully connected linear model"""
+
+    def __init__(self, input_hidden: int, intermediate_hidden: int, dropout_rate: float = None):
+        """
+        :param input_hidden: first-hidden layer input embed-dim
+        :type input_hidden: int
+        :param intermediate_hidden: layer-(hidden)-layer middle point weight
+        :type intermediate_hidden: int
+        :param dropout_rate: dropout rate, defaults to None
+        :type dropout_rate: float, optional
+        """
         super().__init__()
+
         self.linear_1 = nn.Linear(input_hidden, intermediate_hidden)
         self.dropout = nn.Dropout(dropout_rate)
         self.linear_2 = nn.Linear(intermediate_hidden, input_hidden)
 
-    def forward(self, x):
+    def forward(self, x) -> torch.FloatTensor:
+        """forward through fully-connected 2-layer
+        
+        :param x: fnn input
+        :type x: torch.FloatTensor
+        :return: return fnn output
+        :rtype: torch.FloatTensor
+        """
         x = fnn.relu(self.linear_1(x))
         return self.linear_2(self.dropout(x))
 
 
 class ConveRTOuterFeedForward(nn.Module):
-    def __init__(self, input_hidden, intermediate_hidden, dropout_rate: float = None):
+    """Fully-Connected 3-layer Linear Model"""
+
+    def __init__(self, input_hidden: int, intermediate_hidden: int, dropout_rate: float = None):
+        """
+        :param input_hidden: first-hidden layer input embed-dim
+        :type input_hidden: int
+        :param intermediate_hidden: layer-(hidden)-layer middle point weight
+        :type intermediate_hidden: int
+        :param dropout_rate: dropout rate, defaults to None
+        :type dropout_rate: float, optional
+        """
+
         super().__init__()
+
         self.linear_1 = nn.Linear(input_hidden, intermediate_hidden)
         self.dropout = nn.Dropout(dropout_rate)
         self.linear_2 = nn.Linear(intermediate_hidden, intermediate_hidden)
@@ -73,7 +123,14 @@ class ConveRTOuterFeedForward(nn.Module):
         self.linear_3 = nn.Linear(intermediate_hidden, intermediate_hidden)
         self.norm = LayerNorm(intermediate_hidden)
 
-    def forward(self, x):
+    def forward(self, x: torch.FloatTensor) -> torch.FloatTensor:
+        """forward through fully-connected 3-layer
+        
+        :param x: fnn input
+        :type x: torch.FloatTensor
+        :return: return fnn output
+        :rtype: torch.FloatTensor
+        """
         x = self.linear_1(x)
         x = self.linear_2(self.dropout(x))
         x = self.linear_3(self.dropout(x))
@@ -81,28 +138,55 @@ class ConveRTOuterFeedForward(nn.Module):
 
 
 class ConveRTEmbedding(nn.Module):
+    """ Subword + Positional Embedding Layer """
+
     def __init__(self, config: ConveRTModelConfig):
+        """ init embedding odel
+        
+        :param config: model.config
+        :type config: ConveRTModelConfig
+        """
         super().__init__()
+
         # embedding dimensionality of 512.
         self.subword_embed = nn.Embedding(config.vocab_size, config.num_embed_hidden)
         self.m1_positional_embed = nn.Embedding(47, config.num_embed_hidden)
         self.m2_positional_embed = nn.Embedding(11, config.num_embed_hidden)
 
-    def forward(self, input_ids, position_ids=None):
+    def forward(self, input_ids: torch.LongTensor, position_ids: torch.LongTensor = None) -> torch.FloatTensor:
+        """embedding sum of positional and sub-word representation
+        
+        m1_positional_embed is calculated with m1_embed_weight(mod(position_ids, 47))
+        m2_positional_embed is calculated with m1_embed_weight(mod(position_ids, 11))
+
+        :param input_ids: raw token ids
+        :type input_ids: torch.LongTensor
+        :param position_ids: [description], defaults to None
+        :type position_ids: torch.LongTensor, optional
+        :return: return embedding sum (position{m1, m2} + sub-word)
+        :rtype: torch.FloatTensor
+        """
         if position_ids is None:
             position_ids = torch.arange(input_ids.size(1), device=input_ids.device)
 
         subword_embed = self.subword_embed.forward(input_ids)
-        m1_positional_embed = self.m1_positional_embed.forward(position_ids)
-        m2_positional_embed = self.m2_positional_embed.forward(position_ids)
+        m1_positional_embed = self.m1_positional_embed.forward(torch.fmod(position_ids, 47))
+        m2_positional_embed = self.m2_positional_embed.forward(torch.fmod(position_ids, 11))
         embedding = subword_embed + m1_positional_embed + m2_positional_embed
         return embedding
 
 
 class ConveRTEncoderLayer(nn.Module):
+    """Single Transformer block which is same architecture with Attention is All You Need"""
+
     def __init__(self, config: ConveRTModelConfig):
-        """Single Transformer block which is same architecture with Attention is All You Need
-        
+        """ initialize single encoder layer (Transformer Block)
+
+        single encoder layer is consisted with under layers.
+
+        1. single-head self-attention
+        2. fead-forward-1 layer
+
         :param config: model config
         :type config: ConveRTModelConfig
         """
@@ -118,8 +202,15 @@ class ConveRTEncoderLayer(nn.Module):
         self.norm2 = LayerNorm(config.num_embed_hidden)
         self.dropout2 = nn.Dropout(config.dropout_rate)
 
-    def forward(self, embed_output: torch.FloatTensor, attention_mask: Optional[torch.FloatTensor] = None) -> torch.Tensor:
+    def forward(
+        self, embed_output: torch.FloatTensor, attention_mask: Optional[torch.FloatTensor] = None
+    ) -> torch.Tensor:
         """calculating single Transformer block with under procedure.
+
+        1. single-self attention (EMBED_DIM -> ATTEN_PROJ -> EMBED_DIM)
+        2. first noramlization + residual connection
+        3. fead-forward-1 layer (EMBED_DIM -> FFD-1-DIM -> EMBED_DIM)
+        4. second normalization + residual connection
         
         :param embed_output: sub-word, positional embedding sum output
         :type embed_output: torch.FloatTensor

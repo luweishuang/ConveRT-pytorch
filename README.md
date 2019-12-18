@@ -4,7 +4,7 @@ ConveRT Paper Pytorch Implementation
 
 **! Warning, currently this project is working on progress!**
 
-[Ducuments: Detail Usage & Description about Implementation](https://codertimo.github.io/convert/docs/index.html)
+[Ducuments: Detail Usage & Description about Implementation](https://codertimo.github.io/convert/index.html)
 
 ## Developed By
 

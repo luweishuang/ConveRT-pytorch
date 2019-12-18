@@ -1,6 +1,12 @@
 # ConveRT-pytorch
 
+[![Documentation Status](https://readthedocs.org/projects/convert-pytorch/badge/?version=latest)](https://convert-pytorch.readthedocs.io/en/latest/?badge=latest)
+
 ConveRT Paper Pytorch Implementation
+
+**! Warning, currently this project is working on progress!**
+
+[Ducuments: Detail Usage & Description about Implementation](https://convert-pytorch.readthedocs.io/en/latest/)
 
 ## Developed By
 

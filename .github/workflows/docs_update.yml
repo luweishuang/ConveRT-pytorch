@@ -6,10 +6,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: "Repository dispatch"
-        uses: defold/repository-dispatch@1.1.4
+      - name: Repository Dispatch
+        uses: peter-evans/repository-dispatch@v1
         with:
-          repo: "codertimo/codertimo.github.io"
-          token: ${{ secrets.REPO_GITHUB_KEY }}
-          user: "codertimo@gmail.com"
-          action: "update-convert-docs"
+          token: ${{ secrets.REPO_GITHUB_TOKEN }}
+          event-type: update-convert-docs

@@ -1,0 +1,15 @@
+name: Docs Update Workflow
+
+on: [push]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps: 
+        name: 'Repository dispatch',
+        uses: defold/repository-dispatch@1.1.4,
+        with: 
+            repo: 'codertimo/codertimo.github.io',
+            token: ${{ secrets.GITHUB_TOKEN }},
+            user: 'codertimo',
+            action: 'update-convert-docs'

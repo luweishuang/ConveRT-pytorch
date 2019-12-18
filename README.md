@@ -1,12 +1,10 @@
 # ConveRT-pytorch
 
-[![Documentation Status](https://readthedocs.org/projects/convert-pytorch/badge/?version=latest)](https://convert-pytorch.readthedocs.io/en/latest/?badge=latest)
-
 ConveRT Paper Pytorch Implementation
 
 **! Warning, currently this project is working on progress!**
 
-[Ducuments: Detail Usage & Description about Implementation](https://convert-pytorch.readthedocs.io/en/latest/)
+[Ducuments: Detail Usage & Description about Implementation](https://codertimo.github.io/convert/docs/index.html)
 
 ## Developed By
 
@@ -14,7 +12,7 @@ Junseong Kim (junseong.kim@scatterlab.co.kr)
 
 ## Citations
 
-* [ConveRT: Efficient and Accurate Conversational Representations from Transformers](https://arxiv.org/abs/1911.03688)
+- [ConveRT: Efficient and Accurate Conversational Representations from Transformers](https://arxiv.org/abs/1911.03688)
 
 ```bibtext
 @article{Henderson2019convert,

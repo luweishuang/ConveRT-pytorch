@@ -1,5 +1,5 @@
 ConveRT Dataset
-====================================== 
+======================================
 
 .. automodule:: convert
     :members:
@@ -8,7 +8,7 @@ ConveRT Dataset
 
     Modules
 
-    ------- 
-    
+    -------
+
     .. automodule:: convert.dataset
         :members:

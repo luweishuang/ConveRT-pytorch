@@ -1,5 +1,5 @@
 ConveRT Models
-====================================== 
+======================================
 
 .. automodule:: convert
     :members:
@@ -8,7 +8,7 @@ ConveRT Models
 
     Modules
 
-    ------- 
-    
+    -------
+
     .. automodule:: convert.model
         :members:

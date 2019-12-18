@@ -11,5 +11,5 @@ jobs:
         with:
           repo: 'codertimo/codertimo.github.io'
           token: ${{ secrets.GITHUB_TOKEN }}
-          user: 'codertimo'
+          user: 'codertimo@gmail.com'
           action: 'update-convert-docs'

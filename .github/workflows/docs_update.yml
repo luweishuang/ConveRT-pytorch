@@ -5,7 +5,7 @@ on: [push]
 jobs:
   build:
     runs-on: ubuntu-latest
-    steps: 
+    steps:
       - name: 'Repository dispatch',
         uses: defold/repository-dispatch@1.1.4,
         with:

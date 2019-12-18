@@ -101,7 +101,7 @@ class ConveRTEmbedding(nn.Module):
 
 class ConveRTEncoderLayer(nn.Module):
     def __init__(self, config: ConveRTModelConfig):
-        """Single Transformer Block which is same architecture with Attention is All You Need
+        """Single Transformer block which is same architecture with Attention is All You Need
         
         :param config: model config
         :type config: ConveRTModelConfig
@@ -118,7 +118,16 @@ class ConveRTEncoderLayer(nn.Module):
         self.norm2 = LayerNorm(config.num_embed_hidden)
         self.dropout2 = nn.Dropout(config.dropout_rate)
 
-    def forward(self, embed_output: torch.FloatTensor, attention_mask: Optional[torch.FloatTensor] = None):
+    def forward(self, embed_output: torch.FloatTensor, attention_mask: Optional[torch.FloatTensor] = None) -> torch.Tensor:
+        """calculating single Transformer block with under procedure.
+        
+        :param embed_output: sub-word, positional embedding sum output
+        :type embed_output: torch.FloatTensor
+        :param attention_mask: 1.0 for token position, 0.0 for padding position, defaults to None
+        :type attention_mask: Optional[torch.FloatTensor], optional
+        :return: Transformer block forward output
+        :rtype: torch.Tensor
+        """
         self_attn_output = self.self_attention.forward(embed_output, attention_mask=attention_mask)
         self_attn_output = self.dropout1(self_attn_output)
         norm1_output = self.norm1.forward(self_attn_output + embed_output)

@@ -9,5 +9,5 @@ jobs:
       - name: Repository Dispatch
         uses: peter-evans/repository-dispatch@v1
         with:
-          token: ${{ secrets.REPO_GITHUB_TOKEN }}
+          token: ${{ secrets.REPO_GITHUB_KEY }}
           event-type: update-convert-docs

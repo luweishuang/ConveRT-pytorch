@@ -101,7 +101,7 @@ class ConveRTEmbedding(nn.Module):
 
 class ConveRTEncoderLayer(nn.Module):
     def __init__(self, config: ConveRTModelConfig):
-        """[summary]
+        """Single Transformer Block which is same architecture with Attention is All You Need
         
         :param config: model config
         :type config: ConveRTModelConfig
@@ -232,7 +232,7 @@ class ConveRTDualEncoder(nn.Module):
     """ DualEncoder calculate similairty between context and reply by dot-product.
 
     DualEncoder is consisted with under models
-    
+
     1. shared_encoder (shared with context, reply encoder)
     2. context_encoder (sentence representation encoder for context input)
     3. reply_encoder (sentence representation encoder for reply input)

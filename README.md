@@ -2,6 +2,7 @@
 
 [![CircleCI](https://circleci.com/gh/codertimo/ConveRT-pytorch.svg?style=svg)](https://circleci.com/gh/codertimo/ConveRT-pytorch)
 [![Documentation Status](https://readthedocs.org/projects/ansicolortags/badge/?version=latest)](https://codertimo.github.io/convert/index.html)
+[![codecov](https://codecov.io/gh/codertimo/ConveRT-pytorch/branch/master/graph/badge.svg)](https://codecov.io/gh/codertimo/ConveRT-pytorch)
 
 ConveRT Paper Pytorch Implementation
 

@@ -1,0 +1,13 @@
+# for code style
+black
+flake8
+isort
+
+# for testing
+pytest
+coveralls
+pytest-cov
+
+# for documentation
+sphinx
+git+https://github.com/pandas-dev/pandas-sphinx-theme.git@master#egg=pandas-sphinx-theme

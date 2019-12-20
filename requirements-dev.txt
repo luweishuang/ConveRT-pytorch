@@ -5,8 +5,9 @@ isort
 
 # for testing
 pytest
-coveralls
 pytest-cov
+codecov
+coverage
 
 # for documentation
 sphinx

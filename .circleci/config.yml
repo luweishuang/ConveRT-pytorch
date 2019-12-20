@@ -43,7 +43,7 @@ jobs:
           name: upload coverage
           command: |
             . env/bin/activate
-            coveralls
+            codecov
 
   run_linting:
     executor: convert-pytorch-executor

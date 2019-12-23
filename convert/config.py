@@ -9,3 +9,9 @@ class ConveRTModelConfig(NamedTuple):
     vocab_size: int = 64
     num_encoder_layers: int = 6
     dropout_rate: float = 0.1
+
+
+class ConveRTDataConfig(NamedTuple):
+    sp_model_path: str
+    train_dataset_dir: str
+    test_dataset_dir: str

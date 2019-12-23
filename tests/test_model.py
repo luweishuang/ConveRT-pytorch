@@ -5,9 +5,9 @@ from convert.model import (
     ConveRTDualEncoder,
     ConveRTEmbedding,
     ConveRTEncoder,
+    ConveRTEncoderInput,
     ConveRTEncoderLayer,
     ConveRTSharedEncoder,
-    EncoderInput,
     SelfAttention,
 )
 
@@ -52,7 +52,7 @@ def test_convert_shared_encoder():
 
     input_ids = torch.randint(high=config.vocab_size, size=(BATCH_SIZE, SEQ_LEN))
     position_ids = torch.tensor([[i for i in range(SEQ_LEN)] for _ in range(BATCH_SIZE)])
-    encoder_input = EncoderInput(
+    encoder_input = ConveRTEncoderInput(
         input_ids=input_ids, position_ids=position_ids, attention_mask=None, input_lengths=None
     )
 
@@ -68,7 +68,7 @@ def test_convert_encoder():
     input_ids = torch.randint(high=config.vocab_size, size=(BATCH_SIZE, SEQ_LEN))
     position_ids = torch.tensor([[i for i in range(SEQ_LEN)] for _ in range(BATCH_SIZE)])
     input_lengths = torch.tensor([SEQ_LEN for _ in range(BATCH_SIZE)], dtype=torch.float)
-    encoder_input = EncoderInput(
+    encoder_input = ConveRTEncoderInput(
         input_ids=input_ids, position_ids=position_ids, attention_mask=None, input_lengths=input_lengths
     )
 
@@ -83,7 +83,7 @@ def test_convert_dual_encoder():
     input_ids = torch.randint(high=config.vocab_size, size=(BATCH_SIZE, SEQ_LEN))
     position_ids = torch.tensor([[i for i in range(SEQ_LEN)] for _ in range(BATCH_SIZE)])
     input_lengths = torch.tensor([SEQ_LEN for _ in range(BATCH_SIZE)], dtype=torch.float)
-    encoder_input = EncoderInput(
+    encoder_input = ConveRTEncoderInput(
         input_ids=input_ids, position_ids=position_ids, attention_mask=None, input_lengths=input_lengths
     )
 
@@ -98,7 +98,7 @@ def test_convert_dual_encoder_loss():
     input_ids = torch.randint(high=config.vocab_size, size=(BATCH_SIZE, SEQ_LEN))
     position_ids = torch.tensor([[i for i in range(SEQ_LEN)] for _ in range(BATCH_SIZE)])
     input_lengths = torch.tensor([SEQ_LEN for _ in range(BATCH_SIZE)], dtype=torch.float)
-    encoder_input = EncoderInput(
+    encoder_input = ConveRTEncoderInput(
         input_ids=input_ids, position_ids=position_ids, attention_mask=None, input_lengths=input_lengths
     )
 
@@ -118,7 +118,7 @@ def test_convert_dual_encoder_splited_loss():
     input_ids = torch.randint(high=config.vocab_size, size=(batch_size, SEQ_LEN))
     position_ids = torch.tensor([[i for i in range(SEQ_LEN)] for _ in range(batch_size)])
     input_lengths = torch.tensor([SEQ_LEN for _ in range(batch_size)], dtype=torch.float)
-    encoder_input = EncoderInput(
+    encoder_input = ConveRTEncoderInput(
         input_ids=input_ids, position_ids=position_ids, attention_mask=None, input_lengths=input_lengths
     )
 

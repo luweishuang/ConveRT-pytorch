@@ -2,11 +2,4 @@ torch
 tqdm
 sklearn
 tensorboard
-
-# for development
-black
-flake8
-isort
-pytest
-sphinx
-git+https://github.com/pandas-dev/pandas-sphinx-theme.git@master
+sentencepiece

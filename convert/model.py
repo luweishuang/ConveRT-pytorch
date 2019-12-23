@@ -1,5 +1,5 @@
 import math
-from typing import NamedTuple, Optional, Tuple
+from typing import Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -8,13 +8,7 @@ from torch.nn.modules.normalization import LayerNorm
 from torch.nn.modules.transformer import MultiheadAttention
 
 from .config import ConveRTModelConfig
-
-
-class EncoderInput(NamedTuple):
-    input_ids: torch.LongTensor
-    attention_mask: torch.FloatTensor
-    position_ids: torch.LongTensor = None
-    input_lengths: torch.LongTensor = None
+from .datatype import ConveRTEncoderInput
 
 
 class SelfAttention(nn.Module):
@@ -254,15 +248,15 @@ class ConveRTSharedEncoder(nn.Module):
         self.encoder_layers = nn.ModuleList([ConveRTEncoderLayer(config) for _ in range(config.num_encoder_layers)])
         self.two_head_self_attn = MultiheadAttention(config.num_embed_hidden, 2, dropout=config.dropout_rate)
 
-    def forward(self, encoder_input: EncoderInput) -> torch.Tensor:
+    def forward(self, encoder_input: ConveRTEncoderInput) -> torch.Tensor:
         """ Make sentence representation with under procedure
 
         1. pass to sub-word embedding (subword and positional)
         2. pass to mulit-layer transformer block
         3. pass to 2-head self-attention layer
 
-        :param encoder_input: raw encoder inputs (EncoderInput.input_ids, EncoderInput.position_ids etc..)
-        :type encoder_input: EncoderInput
+        :param encoder_input: raw encoder inputs (ConveRTEncoderInput.input_ids, ConveRTEncoderInput.position_ids etc..)
+        :type encoder_input: ConveRTEncoderInput
         :return: sentence representation (which didn't pass through fead-forward-2 layer)
         :rtype: torch.Tensor
         """
@@ -306,7 +300,7 @@ class ConveRTEncoder(nn.Module):
             config.num_embed_hidden, config.feed_forward2_hidden, config.dropout_rate
         )
 
-    def forward(self, encoder_input: EncoderInput) -> torch.Tensor:
+    def forward(self, encoder_input: ConveRTEncoderInput) -> torch.Tensor:
         """ Make each sentence representation (context, reply) by following procedure.
 
         1. pass through shared encoder -> 1-step sentence represnetation
@@ -314,8 +308,8 @@ class ConveRTEncoder(nn.Module):
         3. normalize sentence representation with each sequence length (reduce reduction problem of diffrent sentence length)
         4. pass throught the feed-foward-2 layer which has independent weight by context and reply encoder part.
 
-        :param encoder_input: raw model input (EncoderInput.input_ids, EncoderInput.position_ids, etc)
-        :type encoder_input: EncoderInput
+        :param encoder_input: raw model input (ConveRTEncoderInput.input_ids, ConveRTEncoderInput.position_ids, etc)
+        :type encoder_input: ConveRTEncoderInput
         :return: sentence representation about the context or reply
         :rtype: torch.Tensor
         """
@@ -353,8 +347,8 @@ class ConveRTDualEncoder(nn.Module):
 
     def forward(
         self,
-        context_input: EncoderInput,
-        reply_input: EncoderInput,
+        context_input: ConveRTEncoderInput,
+        reply_input: ConveRTEncoderInput,
         use_softmax: bool = False,
         with_embed: bool = False,
         split_size: int = 1,
@@ -362,9 +356,9 @@ class ConveRTDualEncoder(nn.Module):
         """ calculate similarity matrix (CONTEXT_BATCH_SIZE, REPLY_BATCH_SIZE) between context and reply
 
         :param context_input: raw context encoder input
-        :type context_input: EncoderInput
+        :type context_input: ConveRTEncoderInput
         :param reply_input: raw reply encoder input
-        :type reply_input: EncoderInput
+        :type reply_input: ConveRTEncoderInput
         :param use_softmax: apply softmax on similarity matrix or not, defaults to False
         :type use_softmax: bool, optional
         :param with_embed: return embedding value or not, defaults to False

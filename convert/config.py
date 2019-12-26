@@ -11,6 +11,12 @@ class ConveRTModelConfig(NamedTuple):
     dropout_rate: float = 0.1
 
 
+class ConveRTTrainConfig(NamedTuple):
+    batch_size: int = 64
+    split_size: int = 100
+    learning_rate: float = 2e-5
+
+
 class ConveRTDataConfig(NamedTuple):
     sp_model_path: str
     train_dataset_dir: str

@@ -8,7 +8,7 @@ from torch.nn.modules.normalization import LayerNorm
 from torch.nn.modules.transformer import MultiheadAttention
 
 from .config import ConveRTModelConfig
-from .datatype import ConveRTEncoderInput
+from .datatype import ConveRTDualEncoderOutput, ConveRTEncoderInput
 
 
 class SelfAttention(nn.Module):
@@ -337,7 +337,7 @@ class ConveRTDualEncoder(nn.Module):
         """ Initialize model with config value
         shared_encoder is created in __init__ with ConveRTModelConfig and distributed to each encoder.
 
-        :param config: [description]
+        :param config: model config
         :type config: ConveRTModelConfig
         """
         super().__init__()
@@ -346,32 +346,59 @@ class ConveRTDualEncoder(nn.Module):
         self.reply_encoder = ConveRTEncoder(config, self.shared_encoder)
 
     def forward(
-        self,
-        context_input: ConveRTEncoderInput,
-        reply_input: ConveRTEncoderInput,
-        use_softmax: bool = False,
-        with_embed: bool = False,
-        split_size: int = 1,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """ calculate similarity matrix (CONTEXT_BATCH_SIZE, REPLY_BATCH_SIZE) between context and reply
+        self, context_input: ConveRTEncoderInput, reply_input: ConveRTEncoderInput
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """ calculate query, reply representation.
 
         :param context_input: raw context encoder input
         :type context_input: ConveRTEncoderInput
         :param reply_input: raw reply encoder input
         :type reply_input: ConveRTEncoderInput
-        :param use_softmax: apply softmax on similarity matrix or not, defaults to False
-        :type use_softmax: bool, optional
-        :param with_embed: return embedding value or not, defaults to False
-        :type with_embed: bool, optional
-        :param split_size: split context and reply into split_size to calculate cosine similarity in fixed-length.
-        :type split_size: int, optional
-        :return: (CONTEXT_BATCH_SIZE, REPLY_BATCH_SIZE) size of similarity_matrix + (context_embed, reply_embed)
-        :rtype: -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        :return: context_embed, reply_embed
+        :rtype: -> Tuple[torch.Tensor, torch.Tensor]:
         """
         context_embed = self.context_encoder.forward(context_input)
         reply_embed = self.reply_encoder.forward(reply_input)
-        cosine_sim = self.calculate_similarity(context_embed, reply_embed, use_softmax, split_size)
-        return (cosine_sim, context_embed, reply_embed) if with_embed else cosine_sim
+        return context_embed, reply_embed
+
+
+class ConveRTCosineLoss(nn.Module):
+    def __init__(self, split_size: int = 1):
+        """calculate similarity matrix (CONTEXT_BATCH_SIZE, REPLY_BATCH_SIZE) between context and reply
+
+        :param split_size: split matrix into fixed-size, defaults to 1
+        :type split_size: int, optional
+        """
+        super().__init__()
+        self.split_size = split_size
+
+    def forward(self, context_embed: torch.Tensor, reply_embed: torch.Tensor) -> ConveRTDualEncoderOutput:
+        """calculate context-reply matching loss using negative-sample in batch.
+        if query - reply combination is 100, then each negative sample of query is 99.
+        so we multiply query and reply embedding into 100 x 100 similiarity matrix.
+        and then calculate the loss with 1-100 continueous label.
+
+        :param context_embed: encoded context embedding
+        :type context_embed: torch.Tensor
+        :param reply_embed: encoded reply embedding
+        :type reply_embed: torch.Tensor
+        :return: computed loss, acc, etc
+        :rtype: ConveRTDualEncoderOutput
+        """
+        cosine_similarity = self.calculate_similarity(
+            context_embed, reply_embed, use_softmax=True, split_size=self.split_size
+        )
+        loss, correct_count, total_count = self.calculate_loss(cosine_similarity)
+        accuracy = float(correct_count) / total_count
+
+        return ConveRTDualEncoderOutput(
+            context_embed=context_embed,
+            reply_embed=reply_embed,
+            loss=loss,
+            accuracy=accuracy,
+            correct_count=correct_count,
+            total_count=total_count,
+        )
 
     @staticmethod
     def calculate_similarity(
@@ -387,7 +414,7 @@ class ConveRTDualEncoder(nn.Module):
         :type use_softmax: bool, optional
         :param split_size: split context and reply into split_size to calculate cosine similarity in fixed-length.
         :type split_size: int, optional
-        :return: dot-product output of two matrix
+        :return: dot-product output of two matrix (CONTEXT_BATCH_SIZE, REPLY_BATCH_SIZE)
         :rtype: torch.Tensor
         """
         # TODO : Scaled-Dot Product
@@ -402,14 +429,13 @@ class ConveRTDualEncoder(nn.Module):
         return fnn.softmax(cosine_similarity, dim=-1) if use_softmax else cosine_similarity
 
     @staticmethod
-    def calculate_loss(cosine_similarity: torch.FloatTensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        """ calculate context-reply matching loss with categorical-cross entropy.
+    def calculate_loss(cosine_similarity: torch.FloatTensor) -> Tuple[torch.FloatTensor, int, int]:
+        """calculate context-reply matching loss with categorical-cross entropy.
 
         :param cosine_similarity: cosine similairty matrix (CONTEXT_BATCH_SIZE, REPLY_BATCH_SIZE)
         :type cosine_similarity: torch.FloatTensor
-        :return: backward available loss and accuracy
-        :rtype: torch.Tensor, torch.Tensor
-        :return: calculated loss of cosine similarity with label
+        :return: loss, correct_count, total_size
+        :rtype: Tuple[torch.FloatTensor, int, int]
         """
         is_splited = len(cosine_similarity.size()) == 3
         label_batch_size = cosine_similarity.size(1) if is_splited else cosine_similarity.size(0)
@@ -421,5 +447,5 @@ class ConveRTDualEncoder(nn.Module):
             cosine_similarity = cosine_similarity.view(splited_batch_size * split_size, split_size)
 
         loss = fnn.cross_entropy(cosine_similarity, label)
-        accuracy = cosine_similarity.argmax(-1).eq(label).float().sum() / label.size(0)
-        return loss, accuracy
+        correct_count = cosine_similarity.argmax(-1).eq(label).long().sum().item()
+        return loss, correct_count, label.size(0)

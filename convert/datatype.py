@@ -1,4 +1,4 @@
-from typing import Dict, List, NamedTuple, Optional, Union
+from typing import Dict, List, NamedTuple, Union
 
 import torch
 
@@ -18,19 +18,13 @@ class ConveRTFeature(NamedTuple):
 class ConveRTExample(NamedTuple):
     context: List[str]
     response: str
-    response_author: Optional[str]
-    context_author: Optional[str]
-    subreddit: Optional[str]
-    thread_id: Optional[str]
 
     @staticmethod
-    def load(example: Dict[str, str]) -> "ConveRTExample":
+    def load_reddit_json(example: Dict[str, str]) -> "ConveRTExample":
         context_keys = sorted([key for key in example.keys() if "context" in key])
-        return ConveRTExample(
-            context=[example[key] for key in context_keys],
-            response=example["response"],
-            context_author=example.get("context_author"),
-            response_author=example.get("response_author"),
-            subreddit=example.get("subreddit"),
-            thread_id=example.get("thread_id"),
-        )
+        return ConveRTExample(context=[example[key] for key in context_keys], response=example["response"],)
+
+    @staticmethod
+    def load_tsv_json(example: str) -> "ConveRTExample":
+        splited_lines = example.strip().split("\t")
+        return ConveRTExample(context=splited_lines[:-1], response=splited_lines[-1])

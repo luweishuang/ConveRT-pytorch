@@ -25,12 +25,12 @@ class ConveRTExample(NamedTuple):
         return ConveRTExample(context=[example[key] for key in context_keys], response=example["response"],)
 
     @staticmethod
-    def load_tsv_json(example: str) -> "ConveRTExample":
+    def load_tsv_line(example: str) -> "ConveRTExample":
         splited_lines = example.strip().split("\t")
         return ConveRTExample(context=splited_lines[:-1], response=splited_lines[-1])
 
 
-class ConveRTDualEncoderOutput(NamedTuple):
+class ConveRTTrainStepOutput(NamedTuple):
     context_embed: torch.FloatTensor
     reply_embed: torch.FloatTensor
     loss: torch.FloatTensor

@@ -1,3 +1,4 @@
+import json
 from typing import List
 
 import torch
@@ -77,3 +78,15 @@ class ConveRTDataset(Dataset):
             context=ConveRTDataset.concat_encoder_inputs([feature.context for feature in features]),
             reply=ConveRTDataset.concat_encoder_inputs([feature.reply for feature in features]),
         )
+
+    @staticmethod
+    def from_reddit_dataset(dataset_path: str, text_util: ConveRTTextUtility) -> "ConveRTDataset":
+        with open(dataset_path) as f:
+            examples = [ConveRTExample.load_reddit_json(json.loads(line.strip())) for line in f]
+        return ConveRTDataset(examples, text_util)
+
+    @staticmethod
+    def from_tsv_dataset(dataset_path: str, text_util: ConveRTTextUtility) -> "ConveRTDataset":
+        with open(dataset_path) as f:
+            examples = [ConveRTExample.load_tsv_line(line.strip()) for line in f]
+        return ConveRTDataset(examples, text_util)

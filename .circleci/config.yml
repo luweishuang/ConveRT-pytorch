@@ -54,9 +54,9 @@ jobs:
           name: run linting
           command: |
             . env/bin/activate
-            black --check convert tests
-            flake8 convert tests
-            isort -rc -c convert tests
+            black --check convert tests train.py
+            flake8 convert tests train.py
+            isort -rc -c convert tests train.py
 
 workflows:
   version: 2

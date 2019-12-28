@@ -5,10 +5,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as fnn
 from torch.nn.modules.normalization import LayerNorm
-from torch.nn.modules.transformer import MultiheadAttention
 
 from .config import ConveRTModelConfig
-from .datatype import ConveRTDualEncoderOutput, ConveRTEncoderInput
+from .datatype import ConveRTEncoderInput, ConveRTTrainStepOutput
 
 
 class SelfAttention(nn.Module):
@@ -64,6 +63,83 @@ class SelfAttention(nn.Module):
         output_value = self.output_projection.forward(weighted_value)
 
         return (output_value, attention_weights) if return_attention else output_value
+
+
+class MultiheadAttention(nn.Module):
+    """Multi-Head Attention Implemenetation from huggingface/transformer"""
+
+    def __init__(self, config: ConveRTModelConfig):
+        super().__init__()
+        self.num_attention_heads = 2
+        self.num_attn_proj = config.num_embed_hidden
+        self.attention_head_size = int(self.num_attn_proj / self.num_attention_heads)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
+
+        self.query = nn.Linear(config.num_embed_hidden, self.num_attn_proj)
+        self.key = nn.Linear(config.num_embed_hidden, self.num_attn_proj)
+        self.value = nn.Linear(config.num_embed_hidden, self.num_attn_proj)
+
+        self.dropout = nn.Dropout(config.dropout_rate)
+
+    def transpose_for_scores(self, x):
+        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        x = x.view(*new_x_shape)
+        return x.permute(0, 2, 1, 3)
+
+    def forward(
+        self,
+        hidden_states: torch.FloatTensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+    ) -> torch.FloatTensor:
+        mixed_query_layer = self.query(hidden_states)
+
+        # If this is instantiated as a cross-attention module, the keys
+        # and values come from an encoder; the attention mask needs to be
+        # such that the encoder's padding tokens are not attended to.
+        if encoder_hidden_states is not None:
+            mixed_key_layer = self.key(encoder_hidden_states)
+            mixed_value_layer = self.value(encoder_hidden_states)
+            attention_mask = encoder_attention_mask
+        else:
+            mixed_key_layer = self.key(hidden_states)
+            mixed_value_layer = self.value(hidden_states)
+
+        query_layer = self.transpose_for_scores(mixed_query_layer)
+        key_layer = self.transpose_for_scores(mixed_key_layer)
+        value_layer = self.transpose_for_scores(mixed_value_layer)
+
+        # Take the dot product between "query" and "key" to get the raw attention scores.
+        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+
+        if attention_mask is not None:
+            attention_mask = attention_mask[:, None, None, :]
+            attention_mask = attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
+            attention_mask = (1.0 - attention_mask) * -10000.0
+
+            # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
+            attention_scores = attention_scores + attention_mask
+
+        # Normalize the attention scores to probabilities.
+        attention_probs = nn.Softmax(dim=-1)(attention_scores)
+
+        # This is actually dropping out entire tokens to attend to, which might
+        # seem a bit unusual, but is taken from the original Transformer paper.
+        attention_probs = self.dropout(attention_probs)
+
+        # Mask heads if we want to
+        if head_mask is not None:
+            attention_probs = attention_probs * head_mask
+
+        context_layer = torch.matmul(attention_probs, value_layer)
+
+        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
+        new_context_layer_shape = context_layer.size()[:-2] + (self.num_attn_proj,)
+        context_layer = context_layer.view(*new_context_layer_shape)
+        return context_layer
 
 
 class ConveRTInnerFeedForward(nn.Module):
@@ -246,7 +322,7 @@ class ConveRTSharedEncoder(nn.Module):
         super().__init__()
         self.embedding = ConveRTEmbedding(config)
         self.encoder_layers = nn.ModuleList([ConveRTEncoderLayer(config) for _ in range(config.num_encoder_layers)])
-        self.two_head_self_attn = MultiheadAttention(config.num_embed_hidden, 2, dropout=config.dropout_rate)
+        self.two_head_self_attn = MultiheadAttention(config)
 
     def forward(self, encoder_input: ConveRTEncoderInput) -> torch.Tensor:
         """ Make sentence representation with under procedure
@@ -270,8 +346,8 @@ class ConveRTSharedEncoder(nn.Module):
             encoder_layer_output = encoder_layer.forward(encoder_layer_output, encoder_input.attention_mask)
 
         # pass through 2-headed self-attention
-        encoder_output, _ = self.two_head_self_attn.forward(
-            encoder_layer_output, encoder_layer_output, encoder_layer_output, attn_mask=encoder_input.attention_mask
+        encoder_output = self.two_head_self_attn.forward(
+            encoder_layer_output, attention_mask=encoder_input.attention_mask,
         )
         return encoder_output
 
@@ -317,7 +393,7 @@ class ConveRTEncoder(nn.Module):
         sumed_word_representations = shared_encoder_output.sum(1)
 
         input_lengths = encoder_input.input_lengths.view(-1, 1)
-        sqrt_reduction_output = sumed_word_representations / torch.sqrt(input_lengths)
+        sqrt_reduction_output = sumed_word_representations / torch.sqrt(input_lengths.float())
 
         encoder_output = self.feed_forward.forward(sqrt_reduction_output)
         return encoder_output
@@ -372,7 +448,7 @@ class ConveRTCosineLoss(nn.Module):
         super().__init__()
         self.split_size = split_size
 
-    def forward(self, context_embed: torch.Tensor, reply_embed: torch.Tensor) -> ConveRTDualEncoderOutput:
+    def forward(self, context_embed: torch.Tensor, reply_embed: torch.Tensor) -> ConveRTTrainStepOutput:
         """calculate context-reply matching loss using negative-sample in batch.
         if query - reply combination is 100, then each negative sample of query is 99.
         so we multiply query and reply embedding into 100 x 100 similiarity matrix.
@@ -383,7 +459,7 @@ class ConveRTCosineLoss(nn.Module):
         :param reply_embed: encoded reply embedding
         :type reply_embed: torch.Tensor
         :return: computed loss, acc, etc
-        :rtype: ConveRTDualEncoderOutput
+        :rtype: ConveRTTrainStepOutput
         """
         cosine_similarity = self.calculate_similarity(
             context_embed, reply_embed, use_softmax=True, split_size=self.split_size
@@ -391,7 +467,7 @@ class ConveRTCosineLoss(nn.Module):
         loss, correct_count, total_count = self.calculate_loss(cosine_similarity)
         accuracy = float(correct_count) / total_count
 
-        return ConveRTDualEncoderOutput(
+        return ConveRTTrainStepOutput(
             context_embed=context_embed,
             reply_embed=reply_embed,
             loss=loss,

@@ -1,8 +1,9 @@
-import json
-
+import pytest
+from sentencepiece import SentencePieceProcessor
 from torch.utils.data import DataLoader
 
-from convert.dataset import ConveRTDataConfig, ConveRTDataset, ConveRTExample, ConveRTTextUtility
+from convert.config import ConveRTTrainConfig
+from convert.dataset import ConveRTDataset, convert_collate_fn, load_instances_from_reddit_dataset
 
 REDDIT_SAMPLE_DATA = {
     "context_author": "Needs_Mega_Magikarp",
@@ -23,68 +24,33 @@ REDDIT_SAMPLE_DATA = {
 }
 
 
-def test_load_reddit_example():
-    example = ConveRTExample.load_reddit_json(REDDIT_SAMPLE_DATA)
-    assert example.response == "Meanieee. *She pouts.*"
-    target_context = [
-        "Cutie.\n\n*He jokes, rubbing your arm again. Vote Craig for best brother 2k15.*",
-        "Meanie.",
-        "*He snorts a laugh*\n\nD'aww. Cute.",
-        "*She sticks her tongue out.*",
-        "*He shrugs.*\n\nBut I dun wanna lie!",
-        "Pfffft. *She playfully pokes his stomach.* Shuddup.",
-        "*He rests his head on yours.*\n\nYou aaaaare. You're the cutest.",
-        "*She giggles again.* No I'm noooot.",
-        "*He hugs you.*\n\nOhmigooods, you're so cute.",
-        "*She giggles at his giggle.* Yay~",
-    ]
-
-    for source, target in zip(example.context, target_context):
-        assert source == target
+@pytest.fixture
+def tokenizer() -> SentencePieceProcessor:
+    config = ConveRTTrainConfig()
+    tokenizer = SentencePieceProcessor()
+    tokenizer.Load(config.sp_model_path)
+    return tokenizer
 
 
-def test_load_reddit_examples():
-    with open("data/sample-dataset.json") as f:
-        examples = [ConveRTExample.load_reddit_json(json.loads(line.strip())) for line in f]
-
-    assert len(examples) == 1000
+def test_load_reddit_instances():
+    instances = load_instances_from_reddit_dataset("data/sample-dataset.json")
+    assert len(instances) == 1000
 
 
-def test_loading_sp_model():
-    config = ConveRTDataConfig(
-        sp_model_path="data/en.wiki.bpe.vs10000.model", train_dataset_dir=None, test_dataset_dir=None
-    )
-    tokenizer = ConveRTTextUtility._load_tokenizer(config)
-    assert tokenizer is not None
+def test_encoding_using_sp_model(tokenizer: SentencePieceProcessor):
+    assert tokenizer.EncodeAsIds("welcome home") == [3441, 4984, 1004]
 
 
-def test_encoding_using_sp_model():
-    config = ConveRTDataConfig(
-        sp_model_path="data/en.wiki.bpe.vs10000.model", train_dataset_dir=None, test_dataset_dir=None
-    )
-    tokenizer = ConveRTTextUtility(config)
-    assert tokenizer.encode_string_to_tokens("welcome home") == [3441, 4984, 1004]
+def test_dataset_get_item(tokenizer: SentencePieceProcessor):
+    instances = load_instances_from_reddit_dataset("data/sample-dataset.json")
+    dataset = ConveRTDataset(instances, tokenizer)
+    assert len(dataset) == 1000
 
 
-def test_dataset_get_item():
-    config = ConveRTDataConfig(
-        sp_model_path="data/en.wiki.bpe.vs10000.model", train_dataset_dir=None, test_dataset_dir=None
-    )
-    text_utility = ConveRTTextUtility(config)
-    examples = [ConveRTExample.load_reddit_json(REDDIT_SAMPLE_DATA)] * 10
-    dataset = ConveRTDataset(examples, text_utility)
-
-    assert len(dataset) == 10
-
-
-def test_dataset_batching():
-    config = ConveRTDataConfig(
-        sp_model_path="data/en.wiki.bpe.vs10000.model", train_dataset_dir=None, test_dataset_dir=None
-    )
-    text_utility = ConveRTTextUtility(config)
-    examples = [ConveRTExample.load_reddit_json(REDDIT_SAMPLE_DATA)] * 10
-    dataset = ConveRTDataset(examples, text_utility)
-    data_loader = DataLoader(dataset, batch_size=3, collate_fn=dataset.collate_fn)
+def test_dataset_batching(tokenizer: SentencePieceProcessor):
+    instances = load_instances_from_reddit_dataset("data/sample-dataset.json")
+    dataset = ConveRTDataset(instances, tokenizer)
+    data_loader = DataLoader(dataset, batch_size=3, collate_fn=convert_collate_fn)
 
     for batch in data_loader:
         print(batch)

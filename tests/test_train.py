@@ -1,23 +1,26 @@
 import pytest
 import torch
+from sentencepiece import SentencePieceProcessor
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 
-from convert.config import ConveRTDataConfig, ConveRTModelConfig, ConveRTTrainConfig
-from convert.dataset import ConveRTDataset, ConveRTTextUtility
+from convert.config import ConveRTModelConfig, ConveRTTrainConfig
+from convert.criterion import ConveRTCosineLoss
+from convert.dataset import ConveRTDataset, convert_collate_fn, load_instances_from_reddit_dataset
+from convert.logger import TrainLogger
 from convert.model import ConveRTDualEncoder
 from convert.trainer import ConveRTTrainer
 
 
 @pytest.fixture
-def train_data_loader():
-    data_config = ConveRTDataConfig(
-        sp_model_path="data/en.wiki.bpe.vs10000.model", train_dataset_dir=None, test_dataset_dir=None
-    )
-    train_config = ConveRTTrainConfig()
-    text_utility = ConveRTTextUtility(data_config)
+def train_dataloader():
+    config = ConveRTTrainConfig(train_batch_size=10, split_size=5)
+    tokenizer = SentencePieceProcessor()
+    tokenizer.Load(config.sp_model_path)
 
-    dataset = ConveRTDataset.from_reddit_dataset("data/sample-dataset.json", text_utility)
-    data_loader = DataLoader(dataset, batch_size=train_config.batch_size, collate_fn=dataset.collate_fn)
+    instances = load_instances_from_reddit_dataset("data/sample-dataset.json")[:100]
+    dataset = ConveRTDataset(instances, tokenizer)
+    data_loader = DataLoader(dataset, batch_size=config.train_batch_size, collate_fn=convert_collate_fn)
     return data_loader
 
 
@@ -36,33 +39,39 @@ def convert_model():
     return ConveRTDualEncoder(model_config)
 
 
-def test_init_trainer(convert_model: ConveRTDualEncoder, train_data_loader: DataLoader):
-    train_config = ConveRTTrainConfig()
-    trainer = ConveRTTrainer(convert_model, train_config, train_data_loader)
+def test_init_trainer(convert_model: ConveRTDualEncoder, train_dataloader: DataLoader):
+    train_config = ConveRTTrainConfig(train_batch_size=10, split_size=5)
+    tensorboard = SummaryWriter()
+    logger = TrainLogger("test-logger", tensorboard)
+    device = torch.device("cpu")
+
+    criterion = ConveRTCosineLoss(split_size=train_config.split_size)
+    trainer = ConveRTTrainer(
+        model=convert_model,
+        criterion=criterion,
+        train_config=train_config,
+        train_dataloader=train_dataloader,
+        test_dataloader=train_dataloader,
+        logger=logger,
+        device=device,
+    )
     assert trainer is not None
 
 
-def test_train_one_step(convert_model: ConveRTDualEncoder, train_data_loader: DataLoader):
-    train_config = ConveRTTrainConfig(batch_size=32, split_size=8, learning_rate=2e-3)
-    trainer = ConveRTTrainer(convert_model, train_config, train_data_loader)
-    step_output = trainer.train_step(epoch_id=1, step_id=1, feature=next(iter(train_data_loader)))
+def test_train_one_epoch(convert_model: ConveRTDualEncoder, train_dataloader: DataLoader):
+    train_config = ConveRTTrainConfig(train_batch_size=10, split_size=5)
+    tensorboard = SummaryWriter()
+    logger = TrainLogger("test-logger", tensorboard)
+    device = torch.device("cpu")
 
-    assert step_output.loss.item() > 0
-    assert step_output.accuracy >= 0
-    assert step_output.correct_count >= 0
-
-    assert isinstance(step_output.reply_embed, torch.FloatTensor)
-    assert isinstance(step_output.context_embed, torch.FloatTensor)
-
-
-def test_train_one_step_logging(convert_model: ConveRTDualEncoder, train_data_loader: DataLoader):
-    train_config = ConveRTTrainConfig(batch_size=32, split_size=8, learning_rate=2e-3)
-    trainer: ConveRTTrainer = ConveRTTrainer(convert_model, train_config, train_data_loader)
-    step_output = trainer.train_step(epoch_id=1, step_id=1, feature=next(iter(train_data_loader)))
-    trainer.logger.log_train_step(epoch_id=1, step_id=2, step_output=step_output, eta=10.0)
-
-
-def test_train_one_epoch(convert_model: ConveRTDualEncoder, train_data_loader: DataLoader):
-    train_config = ConveRTTrainConfig(batch_size=128, split_size=8, learning_rate=2e-3)
-    trainer: ConveRTTrainer = ConveRTTrainer(convert_model, train_config, train_data_loader)
-    trainer.train_epoch(epoch_id=1)
+    criterion = ConveRTCosineLoss(split_size=train_config.split_size)
+    trainer = ConveRTTrainer(
+        model=convert_model,
+        criterion=criterion,
+        train_config=train_config,
+        train_dataloader=train_dataloader,
+        test_dataloader=train_dataloader,
+        logger=logger,
+        device=device,
+    )
+    trainer.train()

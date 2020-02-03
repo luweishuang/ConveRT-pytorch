@@ -4,13 +4,14 @@ import sys
 from argparse import ArgumentParser
 from datetime import datetime
 
+import torch
+import torch.nn as nn
 from sentencepiece import SentencePieceProcessor
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-import torch
-import torch.nn as nn
 
 from convert.config import ConveRTModelConfig, ConveRTTrainConfig
+from convert.criterion import ConveRTCosineLoss
 from convert.dataset import (
     ConveRTDataset,
     convert_collate_fn,
@@ -18,7 +19,7 @@ from convert.dataset import (
     load_instances_from_tsv_dataset,
 )
 from convert.logger import TrainLogger
-from convert.model import ConveRTDualEncoder, ConveRTCosineLoss
+from convert.model import ConveRTDualEncoder
 from convert.trainer import ConveRTTrainer
 
 

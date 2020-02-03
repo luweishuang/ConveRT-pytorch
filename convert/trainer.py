@@ -1,14 +1,15 @@
 import time
+from typing import Union
+
 import torch
 from torch.nn import DataParallel
-
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 
 from .config import ConveRTTrainConfig
-from .model import ConveRTCosineLoss, ConveRTDualEncoder
+from .criterion import ConveRTCosineLoss
 from .logger import TrainLogger
-from typing import Union
+from .model import ConveRTDualEncoder
 
 CPU_DEVICE = torch.device("cpu")
 

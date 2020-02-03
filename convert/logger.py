@@ -1,6 +1,8 @@
 import logging
+
 from torch.utils.tensorboard import SummaryWriter
-from .model import ConveRTTrainStepOutput
+
+from .criterion import ConveRTTrainStepOutput
 
 
 class TrainLogger(logging.Logger):

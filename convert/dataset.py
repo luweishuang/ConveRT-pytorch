@@ -1,92 +1,112 @@
 import json
-from typing import List
+from dataclasses import dataclass
+from typing import List, NamedTuple
 
 import torch
 from sentencepiece import SentencePieceProcessor
+from torch.nn.functional import pad
 from torch.utils.data import Dataset
 
-from .config import ConveRTDataConfig
-from .datatype import ConveRTEncoderInput, ConveRTExample, ConveRTFeature
+INPUT_ATTRIBUTES = ["input_ids", "attention_mask", "position_ids", "input_lengths"]
 
 
-class ConveRTTextUtility:
-    def __init__(self, config: ConveRTDataConfig):
-        self.tokenizer = self._load_tokenizer(config)
+class DatasetInstance(NamedTuple):
+    context: List[str]
+    response: str
 
-    def encode_example_to_feature(self, example: ConveRTExample):
-        context_str = "+".join(example.context)
-        context_input = self.encode_string_to_input(context_str)
-        reply_input = self.encode_string_to_input(example.response)
-        return ConveRTFeature(context=context_input, reply=reply_input)
 
-    def encode_string_to_input(self, input_str: str) -> ConveRTEncoderInput:
-        input_ids = self.encode_string_to_tokens(input_str)
-        attention_mask = [1 for _ in range(len(input_ids))]
-        position_ids = [i for i in range(len(input_ids))]
+@dataclass
+class EncoderInputFeature:
+    input_ids: torch.Tensor
+    attention_mask: torch.Tensor
+    position_ids: torch.Tensor
+    input_lengths: torch.Tensor
 
-        return ConveRTEncoderInput(
-            input_ids=input_ids, attention_mask=attention_mask, position_ids=position_ids, input_lengths=len(input_ids)
-        )
+    def pad_sequence(self, seq_len: int):
+        self.input_ids = pad(self.input_ids, [0, seq_len - self.input_ids.size(0)], "constant", 0)
+        self.attention_mask = pad(self.attention_mask, [0, seq_len - self.attention_mask.size(0)], "constant", 0)
+        self.position_ids = pad(self.position_ids, [0, seq_len - self.position_ids.size(0)], "constant", 0)
 
-    def encode_string_to_tokens(self, source_str: str) -> List[int]:
-        return self.tokenizer.EncodeAsIds(source_str)
+    def to(self, device: torch.device):
+        self.input_ids = self.input_ids.to(device)
+        self.attention_mask = self.attention_mask.to(device)
+        self.position_ids = self.position_ids.to(device)
+        self.input_lengths = self.input_lengths.to(device)
 
-    @staticmethod
-    def _load_tokenizer(config: ConveRTDataConfig) -> SentencePieceProcessor:
-        tokenizer = SentencePieceProcessor()
-        tokenizer.Load(config.sp_model_path)
-        return tokenizer
+
+class ContextReplyFeaturePair(NamedTuple):
+    context: EncoderInputFeature
+    reply: EncoderInputFeature
+
+    def to(self, device: torch.device):
+        self.context.to(device)
+        self.reply.to(device)
 
 
 class ConveRTDataset(Dataset):
-    def __init__(self, examples: List[ConveRTExample], text_utiltity: ConveRTTextUtility):
+    def __init__(self, instances: List[DatasetInstance], sp_processor: SentencePieceProcessor):
         super().__init__()
-        self.examples = examples
-        self.text_utility = text_utiltity
+        self.instances: List[DatasetInstance] = instances
+        self.sp_processor: SentencePieceProcessor = sp_processor
 
     def __len__(self) -> int:
-        return len(self.examples)
+        return len(self.instances)
 
-    def __getitem__(self, item) -> ConveRTFeature:
-        return self.text_utility.encode_example_to_feature(self.examples[item])
+    def __getitem__(self, item) -> ContextReplyFeaturePair:
+        context_str = "+".join(self.instances[item].context)
+        context_input = self._convert_instance_to_feature(context_str)
+        reply_input = self._convert_instance_to_feature(self.instances[item].response)
+        return ContextReplyFeaturePair(context=context_input, reply=reply_input)
 
-    @staticmethod
-    def concat_tensor_by_attribute(
-        encoder_inputs: List[ConveRTEncoderInput], attr_name: str, add_padding: bool = True
-    ) -> torch.Tensor:
-        concat_candidate = [getattr(encoder_input, attr_name) for encoder_input in encoder_inputs]
+    def _convert_instance_to_feature(self, input_str: str) -> EncoderInputFeature:
+        input_ids = self.sp_processor.EncodeAsIds(input_str)
+        attention_mask = [1 for _ in range(len(input_ids))]
+        position_ids = [i for i in range(len(input_ids))]
 
-        if add_padding:
-            max_seq_len = max(map(len, concat_candidate))
-            for candidate in concat_candidate:
-                candidate.extend([0 for _ in range(max_seq_len - len(candidate))])
-
-        return torch.tensor(concat_candidate)
-
-    @staticmethod
-    def concat_encoder_inputs(encoder_inputs: List[ConveRTEncoderInput]) -> ConveRTEncoderInput:
-        return ConveRTEncoderInput(
-            input_ids=ConveRTDataset.concat_tensor_by_attribute(encoder_inputs, "input_ids"),
-            attention_mask=ConveRTDataset.concat_tensor_by_attribute(encoder_inputs, "attention_mask"),
-            position_ids=ConveRTDataset.concat_tensor_by_attribute(encoder_inputs, "position_ids"),
-            input_lengths=ConveRTDataset.concat_tensor_by_attribute(encoder_inputs, "input_lengths", add_padding=False),
+        return EncoderInputFeature(
+            input_ids=torch.tensor(input_ids),
+            attention_mask=torch.tensor(attention_mask),
+            position_ids=torch.tensor(position_ids),
+            input_lengths=torch.tensor(len(input_ids)),
         )
 
-    @staticmethod
-    def collate_fn(features: List[ConveRTFeature]) -> ConveRTFeature:
-        return ConveRTFeature(
-            context=ConveRTDataset.concat_encoder_inputs([feature.context for feature in features]),
-            reply=ConveRTDataset.concat_encoder_inputs([feature.reply for feature in features]),
-        )
 
-    @staticmethod
-    def from_reddit_dataset(dataset_path: str, text_util: ConveRTTextUtility) -> "ConveRTDataset":
-        with open(dataset_path) as f:
-            examples = [ConveRTExample.load_reddit_json(json.loads(line.strip())) for line in f]
-        return ConveRTDataset(examples, text_util)
+def batching_input_features(encoder_inputs: List[EncoderInputFeature]) -> EncoderInputFeature:
+    max_seq_len = max([int(encoder_input.input_lengths.item()) for encoder_input in encoder_inputs])
+    for encoder_input in encoder_inputs:
+        encoder_input.pad_sequence(max_seq_len)
 
-    @staticmethod
-    def from_tsv_dataset(dataset_path: str, text_util: ConveRTTextUtility) -> "ConveRTDataset":
-        with open(dataset_path) as f:
-            examples = [ConveRTExample.load_tsv_line(line.strip()) for line in f]
-        return ConveRTDataset(examples, text_util)
+    batch_features = {
+        feature_name: torch.stack([getattr(encoder_input, feature_name) for encoder_input in encoder_inputs], dim=0)
+        for feature_name in INPUT_ATTRIBUTES
+    }
+    return EncoderInputFeature(**batch_features)
+
+
+def convert_collate_fn(features: List[ContextReplyFeaturePair]) -> ContextReplyFeaturePair:
+    return ContextReplyFeaturePair(
+        context=batching_input_features([feature.context for feature in features]),
+        reply=batching_input_features([feature.reply for feature in features]),
+    )
+
+
+def load_instances_from_reddit_dataset(dataset_path: str) -> List[DatasetInstance]:
+    instances: List[DatasetInstance] = []
+    dataset_file = open(dataset_path)
+    for line in dataset_file:
+        example = json.loads(line)
+        context_keys = sorted([key for key in example.keys() if "context" in key])
+        instance = DatasetInstance(context=[example[key] for key in context_keys], response=example["response"],)
+        instances.append(instance)
+    return instances
+
+
+def load_instances_from_tsv_dataset(dataset_path: str) -> List[DatasetInstance]:
+    instances: List[DatasetInstance] = []
+    dataset_file = open(dataset_path)
+    for line in dataset_file:
+        splited_lines = line.strip().split("\t")
+        instance = DatasetInstance(context=splited_lines[:-1], response=splited_lines[-1])
+        instances.append(instance)
+    dataset_file.close()
+    return instances

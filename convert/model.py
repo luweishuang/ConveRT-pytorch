@@ -1,5 +1,5 @@
 import math
-from typing import Optional, Tuple
+from typing import Optional, Tuple, NamedTuple
 
 import torch
 import torch.nn as nn
@@ -7,7 +7,7 @@ import torch.nn.functional as fnn
 from torch.nn.modules.normalization import LayerNorm
 
 from .config import ConveRTModelConfig
-from .datatype import ConveRTEncoderInput, ConveRTTrainStepOutput
+from .dataset import EncoderInputFeature
 
 
 class SelfAttention(nn.Module):
@@ -29,7 +29,7 @@ class SelfAttention(nn.Module):
         self.softmax = nn.Softmax(dim=-1)
         self.output_projection = nn.Linear(config.num_attention_project, config.num_embed_hidden)
 
-    def forward(self, query, attention_mask=None, return_attention=False):
+    def forward(self, query, attention_mask=None) -> torch.Tensor:
         """ calculate self-attention of query, key and weighted to value at the end.
         self-attention input is projected by linear layer at the first time.
         applying attention mask for ignore pad index attention weight.
@@ -39,8 +39,6 @@ class SelfAttention(nn.Module):
         :type query: [type]
         :param attention_mask: [description], defaults to None
         :type attention_mask: [type], optional
-        :param return_attention: [description], defaults to False
-        :type return_attention: bool, optional
         :return: [description]
         :rtype: [type]
         """
@@ -62,7 +60,7 @@ class SelfAttention(nn.Module):
 
         output_value = self.output_projection.forward(weighted_value)
 
-        return (output_value, attention_weights) if return_attention else output_value
+        return output_value
 
 
 class MultiheadAttention(nn.Module):
@@ -88,12 +86,12 @@ class MultiheadAttention(nn.Module):
 
     def forward(
         self,
-        hidden_states: torch.FloatTensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-    ) -> torch.FloatTensor:
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
         mixed_query_layer = self.query(hidden_states)
 
         # If this is instantiated as a cross-attention module, the keys
@@ -145,7 +143,7 @@ class MultiheadAttention(nn.Module):
 class ConveRTInnerFeedForward(nn.Module):
     """ 2-layer fully connected linear model"""
 
-    def __init__(self, input_hidden: int, intermediate_hidden: int, dropout_rate: float = None):
+    def __init__(self, input_hidden: int, intermediate_hidden: int, dropout_rate: float = 0.0):
         """
         :param input_hidden: first-hidden layer input embed-dim
         :type input_hidden: int
@@ -160,7 +158,7 @@ class ConveRTInnerFeedForward(nn.Module):
         self.dropout = nn.Dropout(dropout_rate)
         self.linear_2 = nn.Linear(intermediate_hidden, input_hidden)
 
-    def forward(self, x) -> torch.FloatTensor:
+    def forward(self, x) -> torch.Tensor:
         """forward through fully-connected 2-layer
 
         :param x: fnn input
@@ -175,7 +173,7 @@ class ConveRTInnerFeedForward(nn.Module):
 class ConveRTOuterFeedForward(nn.Module):
     """Fully-Connected 3-layer Linear Model"""
 
-    def __init__(self, input_hidden: int, intermediate_hidden: int, dropout_rate: float = None):
+    def __init__(self, input_hidden: int, intermediate_hidden: int, dropout_rate: float = 0.0):
         """
         :param input_hidden: first-hidden layer input embed-dim
         :type input_hidden: int
@@ -194,13 +192,13 @@ class ConveRTOuterFeedForward(nn.Module):
         self.linear_3 = nn.Linear(intermediate_hidden, intermediate_hidden)
         self.norm = LayerNorm(intermediate_hidden)
 
-    def forward(self, x: torch.FloatTensor) -> torch.FloatTensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """forward through fully-connected 3-layer
 
         :param x: fnn input
-        :type x: torch.FloatTensor
+        :type x: torch.Tensor
         :return: return fnn output
-        :rtype: torch.FloatTensor
+        :rtype: torch.Tensor
         """
         x = self.linear_1(x)
         x = self.linear_2(self.dropout(x))
@@ -224,7 +222,7 @@ class ConveRTEmbedding(nn.Module):
         self.m1_positional_embed = nn.Embedding(47, config.num_embed_hidden)
         self.m2_positional_embed = nn.Embedding(11, config.num_embed_hidden)
 
-    def forward(self, input_ids: torch.LongTensor, position_ids: torch.LongTensor = None) -> torch.FloatTensor:
+    def forward(self, input_ids: torch.Tensor, position_ids: torch.Tensor) -> torch.Tensor:
         """embedding sum of positional and sub-word representation
 
         m1_positional_embed is calculated with m1_embed_weight(mod(position_ids, 47))
@@ -237,9 +235,6 @@ class ConveRTEmbedding(nn.Module):
         :return: return embedding sum (position{m1, m2} + sub-word)
         :rtype: torch.FloatTensor
         """
-        if position_ids is None:
-            position_ids = torch.arange(input_ids.size(1), device=input_ids.device)
-
         subword_embed = self.subword_embed.forward(input_ids)
         m1_positional_embed = self.m1_positional_embed.forward(torch.fmod(position_ids, 47))
         m2_positional_embed = self.m2_positional_embed.forward(torch.fmod(position_ids, 11))
@@ -324,7 +319,7 @@ class ConveRTSharedEncoder(nn.Module):
         self.encoder_layers = nn.ModuleList([ConveRTEncoderLayer(config) for _ in range(config.num_encoder_layers)])
         self.two_head_self_attn = MultiheadAttention(config)
 
-    def forward(self, encoder_input: ConveRTEncoderInput) -> torch.Tensor:
+    def forward(self, encoder_input: EncoderInputFeature) -> torch.Tensor:
         """ Make sentence representation with under procedure
 
         1. pass to sub-word embedding (subword and positional)
@@ -376,7 +371,7 @@ class ConveRTEncoder(nn.Module):
             config.num_embed_hidden, config.feed_forward2_hidden, config.dropout_rate
         )
 
-    def forward(self, encoder_input: ConveRTEncoderInput) -> torch.Tensor:
+    def forward(self, encoder_input: EncoderInputFeature) -> torch.Tensor:
         """ Make each sentence representation (context, reply) by following procedure.
 
         1. pass through shared encoder -> 1-step sentence represnetation
@@ -422,7 +417,7 @@ class ConveRTDualEncoder(nn.Module):
         self.reply_encoder = ConveRTEncoder(config, self.shared_encoder)
 
     def forward(
-        self, context_input: ConveRTEncoderInput, reply_input: ConveRTEncoderInput
+        self, context_input: EncoderInputFeature, reply_input: EncoderInputFeature
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """ calculate query, reply representation.
 
@@ -436,6 +431,15 @@ class ConveRTDualEncoder(nn.Module):
         context_embed = self.context_encoder.forward(context_input)
         reply_embed = self.reply_encoder.forward(reply_input)
         return context_embed, reply_embed
+
+
+class ConveRTTrainStepOutput(NamedTuple):
+    context_embed: torch.Tensor
+    reply_embed: torch.Tensor
+    loss: torch.Tensor
+    accuracy: float
+    correct_count: int
+    total_count: int
 
 
 class ConveRTCosineLoss(nn.Module):
@@ -461,10 +465,8 @@ class ConveRTCosineLoss(nn.Module):
         :return: computed loss, acc, etc
         :rtype: ConveRTTrainStepOutput
         """
-        cosine_similarity = self.calculate_similarity(
-            context_embed, reply_embed, use_softmax=True, split_size=self.split_size
-        )
-        loss, correct_count, total_count = self.calculate_loss(cosine_similarity)
+        cosine_similarity = calculate_query_reply_similarity(context_embed, reply_embed, split_size=self.split_size)
+        loss, correct_count, total_count = calculate_query_reply_matching_loss(cosine_similarity)
         accuracy = float(correct_count) / total_count
 
         return ConveRTTrainStepOutput(
@@ -476,11 +478,11 @@ class ConveRTCosineLoss(nn.Module):
             total_count=total_count,
         )
 
-    @staticmethod
-    def calculate_similarity(
-        context_embed: torch.Tensor, reply_embed: torch.Tensor, use_softmax: bool = False, split_size: int = 1
-    ) -> torch.Tensor:
-        """ calculate similairty between two matrix using dot-product
+
+def calculate_query_reply_similarity(
+    context_embed: torch.Tensor, reply_embed: torch.Tensor, split_size: int = 1
+) -> torch.Tensor:
+    """ calculate similairty between two matrix using dot-product
 
         :param context_embed: context representation (BATCH, HIDDEN_DIM)
         :type context_embed: torch.Tensor
@@ -493,35 +495,35 @@ class ConveRTCosineLoss(nn.Module):
         :return: dot-product output of two matrix (CONTEXT_BATCH_SIZE, REPLY_BATCH_SIZE)
         :rtype: torch.Tensor
         """
-        # TODO : Scaled-Dot Product
-        assert context_embed.size(0) == reply_embed.size(0)
+    # TODO : Scaled-Dot Product
+    assert context_embed.size(0) == reply_embed.size(0)
 
-        if split_size > 1:
-            assert context_embed.size(0) % split_size == 0
-            context_embed = context_embed.view(context_embed.size(0) // split_size, split_size, -1)
-            reply_embed = reply_embed.view(reply_embed.size(0) // split_size, split_size, -1)
+    if split_size > 1:
+        assert context_embed.size(0) % split_size == 0
+        context_embed = context_embed.view(context_embed.size(0) // split_size, split_size, -1)
+        reply_embed = reply_embed.view(reply_embed.size(0) // split_size, split_size, -1)
 
-        cosine_similarity = torch.matmul(context_embed, reply_embed.transpose(-1, -2))
-        return fnn.softmax(cosine_similarity, dim=-1) if use_softmax else cosine_similarity
+    cosine_similarity = torch.matmul(context_embed, reply_embed.transpose(-1, -2))
+    return cosine_similarity
 
-    @staticmethod
-    def calculate_loss(cosine_similarity: torch.FloatTensor) -> Tuple[torch.FloatTensor, int, int]:
-        """calculate context-reply matching loss with categorical-cross entropy.
+
+def calculate_query_reply_matching_loss(cosine_similarity: torch.Tensor) -> Tuple[torch.Tensor, int, int]:
+    """calculate context-reply matching loss with categorical-cross entropy.
 
         :param cosine_similarity: cosine similairty matrix (CONTEXT_BATCH_SIZE, REPLY_BATCH_SIZE)
-        :type cosine_similarity: torch.FloatTensor
+        :type cosine_similarity: torch.Tensor
         :return: loss, correct_count, total_size
-        :rtype: Tuple[torch.FloatTensor, int, int]
+        :rtype: Tuple[torch.Tensor, int, int]
         """
-        is_splited = len(cosine_similarity.size()) == 3
-        label_batch_size = cosine_similarity.size(1) if is_splited else cosine_similarity.size(0)
-        label = torch.arange(label_batch_size, device=cosine_similarity.device)
+    is_splited = len(cosine_similarity.size()) == 3
+    label_batch_size = cosine_similarity.size(1) if is_splited else cosine_similarity.size(0)
+    label = torch.arange(label_batch_size, device=cosine_similarity.device)
 
-        if is_splited:
-            splited_batch_size, split_size = cosine_similarity.size(0), cosine_similarity.size(1)
-            label = label.repeat(cosine_similarity.size(0)).view(-1)
-            cosine_similarity = cosine_similarity.view(splited_batch_size * split_size, split_size)
+    if is_splited:
+        splited_batch_size, split_size = cosine_similarity.size(0), cosine_similarity.size(1)
+        label = label.repeat(cosine_similarity.size(0)).view(-1)
+        cosine_similarity = cosine_similarity.view(splited_batch_size * split_size, split_size)
 
-        loss = fnn.cross_entropy(cosine_similarity, label)
-        correct_count = cosine_similarity.argmax(-1).eq(label).long().sum().item()
-        return loss, correct_count, label.size(0)
+    loss = fnn.cross_entropy(cosine_similarity, label)
+    correct_count = int(cosine_similarity.argmax(-1).eq(label).long().sum().item())
+    return loss, correct_count, label.size(0)

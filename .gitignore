@@ -132,3 +132,5 @@ dmypy.json
 
 .vscode/
 data/test-00999-of-01000.json
+
+logs/

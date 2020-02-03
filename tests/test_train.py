@@ -59,7 +59,7 @@ def test_train_one_step_logging(convert_model: ConveRTDualEncoder, train_data_lo
     train_config = ConveRTTrainConfig(batch_size=32, split_size=8, learning_rate=2e-3)
     trainer: ConveRTTrainer = ConveRTTrainer(convert_model, train_config, train_data_loader)
     step_output = trainer.train_step(epoch_id=1, step_id=1, feature=next(iter(train_data_loader)))
-    trainer.logger.log_train_step_output(epoch_id=1, step_id=2, step_output=step_output, eta=10.0)
+    trainer.logger.log_train_step(epoch_id=1, step_id=2, step_output=step_output, eta=10.0)
 
 
 def test_train_one_epoch(convert_model: ConveRTDualEncoder, train_data_loader: DataLoader):

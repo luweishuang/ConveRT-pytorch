@@ -7,7 +7,7 @@ from torch.optim import Adam
 from torch.utils.data import DataLoader
 
 from .config import ConveRTTrainConfig
-from .criterion import ConveRTCosineLoss
+from .criterion import ConveRTCosineLoss, calculate_query_reply_matching_loss
 from .logger import TrainLogger
 from .model import ConveRTDualEncoder
 
@@ -36,6 +36,7 @@ class ConveRTTrainer:
 
         self.train_dataloader: DataLoader = train_dataloader
         self.test_dataloader: DataLoader = test_dataloader
+        self.device_count: int = torch.cuda.device_count() if self.train_config.use_data_paraller else 1
 
     def train(self):
         for epoch_id in range(self.train_config.epochs):
@@ -47,33 +48,44 @@ class ConveRTTrainer:
         total_steps = len(self.train_dataloader)
         for step_id, feature in enumerate(self.train_dataloader):
             start_time = time.time()
-            feature.to(self.device)
 
             self.optimizer.zero_grad()
             context_embed, reply_embed = self.model.forward(feature.context, feature.reply)
-            step_output = self.criterion.forward(context_embed, reply_embed)
-            step_output.loss.backward()
+            query_reply_similarity = self.criterion.forward(context_embed, reply_embed)
+            loss, correct_count, total_count = calculate_query_reply_matching_loss(
+                query_reply_similarity, self.train_config.split_size, self.device_count
+            )
+            accuracy = float(correct_count) / total_count
+
+            loss.backward()
             self.optimizer.step()
 
             eta = (int(time.time() - start_time)) * (total_steps - step_id - 1)
-            self.logger.log_train_step(epoch_id, step_id, eta, step_output)
+            self.logger.log_train_step(epoch_id, step_id, eta, loss, accuracy)
 
     def evaluation(self, epoch_id):
         self.model.eval()
         total_correct, total_size = 0, 0
+        total_loss = 0.0
 
         for feature in self.test_dataloader:
             feature.to(self.device)
 
             with torch.no_grad():
                 context_embed, reply_embed = self.model.forward(feature.context, feature.reply)
-                eval_step_output = self.criterion.forward(context_embed, reply_embed)
+                query_reply_similarity = self.criterion.forward(context_embed, reply_embed)
+                loss, correct_count, total_count = calculate_query_reply_matching_loss(
+                    query_reply_similarity, self.train_config.split_size, self.device_count
+                )
+                accuracy = float(correct_count) / total_count
+                total_loss += loss.item()
 
-            total_correct += eval_step_output.correct_count
-            total_size += eval_step_output.total_count
+            total_correct += correct_count
+            total_size += total_count
 
         accuracy = float(total_correct) / total_size
-        self.logger.log_eval_step(epoch_id, accuracy)
+        avg_loss = total_loss / total_size
+        self.logger.log_eval_step(epoch_id, avg_loss, accuracy)
 
     def save_model(self, epoch_id: int):
         self.model.to(CPU_DEVICE)

@@ -67,11 +67,16 @@ def main() -> int:
 
     train_dataset = ConveRTDataset(train_instances, tokenizer)
     test_dataset = ConveRTDataset(test_instances, tokenizer)
-    train_dataloader = DataLoader(train_dataset, train_config.train_batch_size, collate_fn=convert_collate_fn)
-    test_dataloader = DataLoader(test_dataset, train_config.test_batch_size, collate_fn=convert_collate_fn)
+    train_dataloader = DataLoader(
+        train_dataset, train_config.train_batch_size, collate_fn=convert_collate_fn, drop_last=True
+    )
+    test_dataloader = DataLoader(
+        test_dataset, train_config.test_batch_size, collate_fn=convert_collate_fn, drop_last=True
+    )
 
     model = ConveRTDualEncoder(model_config)
     criterion = ConveRTCosineLoss(split_size=train_config.split_size)
+
     model.to(device)
     criterion.to(device)
 

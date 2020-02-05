@@ -51,7 +51,7 @@ class SelfAttention(nn.Module):
         attention_scores = attention_scores / math.sqrt(self.config.num_attention_project)
 
         if attention_mask is not None:
-            extended_attention_mask = attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
+            extended_attention_mask = attention_mask.to(attention_scores.device)  # fp16 compatibility
             extended_attention_mask = (1.0 - extended_attention_mask.unsqueeze(-1)) * -10000.0
             attention_scores = attention_scores + extended_attention_mask
 
@@ -115,7 +115,7 @@ class MultiheadAttention(nn.Module):
 
         if attention_mask is not None:
             attention_mask = attention_mask[:, None, None, :]
-            attention_mask = attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
+            # attention_mask = attention_mask.to(attention_scores.device)  # fp16 compatibility
             attention_mask = (1.0 - attention_mask) * -10000.0
 
             # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
@@ -384,8 +384,8 @@ class ConveRTEncoder(nn.Module):
         """
         shared_encoder_output = self.shared_encoder.forward(encoder_input)
         sumed_word_representations = shared_encoder_output.sum(1)
-
         input_lengths = encoder_input.input_lengths.view(-1, 1)
+
         sqrt_reduction_output = sumed_word_representations / torch.sqrt(input_lengths.float())
 
         encoder_output = self.feed_forward.forward(sqrt_reduction_output)
@@ -426,6 +426,10 @@ class ConveRTDualEncoder(nn.Module):
         :return: context_embed, reply_embed
         :rtype: -> Tuple[torch.Tensor, torch.Tensor]:
         """
+        current_device = next(self.parameters()).device
+        context_input = context_input.to(current_device)
+        reply_input = reply_input.to(current_device)
+
         context_embed = self.context_encoder.forward(context_input)
         reply_embed = self.reply_encoder.forward(reply_input)
         return context_embed, reply_embed

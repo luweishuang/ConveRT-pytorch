@@ -27,20 +27,22 @@ class EncoderInputFeature:
         self.attention_mask = pad(self.attention_mask, [0, seq_len - self.attention_mask.size(0)], "constant", 0)
         self.position_ids = pad(self.position_ids, [0, seq_len - self.position_ids.size(0)], "constant", 0)
 
-    def to(self, device: torch.device):
-        self.input_ids = self.input_ids.to(device)
-        self.attention_mask = self.attention_mask.to(device)
-        self.position_ids = self.position_ids.to(device)
-        self.input_lengths = self.input_lengths.to(device)
+    def to(self, device: torch.device) -> "EncoderInputFeature":
+        return EncoderInputFeature(
+            input_ids=self.input_ids.to(device),
+            attention_mask=self.attention_mask.to(device),
+            position_ids=self.position_ids.to(device),
+            input_lengths=self.input_lengths.to(device),
+        )
 
 
-class ContextReplyFeaturePair(NamedTuple):
+@dataclass
+class ContextReplyFeaturePair:
     context: EncoderInputFeature
     reply: EncoderInputFeature
 
-    def to(self, device: torch.device):
-        self.context.to(device)
-        self.reply.to(device)
+    def to(self, device: torch.device) -> "ContextReplyFeaturePair":
+        return ContextReplyFeaturePair(context=self.context.to(device), reply=self.reply.to(device))
 
 
 class ConveRTDataset(Dataset):

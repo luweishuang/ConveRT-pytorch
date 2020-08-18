@@ -13,8 +13,8 @@ class ConveRTModelConfig(NamedTuple):
 
 class ConveRTTrainConfig(NamedTuple):
     sp_model_path: str = "data/en.wiki.bpe.vs10000.model"
-    train_dataset_path: str = "data/sample-dataset.json"
-    test_dataset_path: str = "data/sample-dataset.json"
+    train_dataset_path: str = "data/sample-dataset_train.json"
+    test_dataset_path: str = "data/sample-dataset_val.json"
 
     model_save_dir: str = "logs/models/"
     log_dir: str = "logs"
@@ -24,7 +24,7 @@ class ConveRTTrainConfig(NamedTuple):
     is_reddit: bool = True
 
     train_batch_size: int = 512   # 64
-    test_batch_size: int = 256
+    test_batch_size: int = 25     # 256
 
     split_size: int = 8
     learning_rate: float = 2e-5

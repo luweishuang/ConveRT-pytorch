@@ -427,11 +427,9 @@ class ConveRTDualEncoder(nn.Module):
         :rtype: -> Tuple[torch.Tensor, torch.Tensor]:
         """
         current_device = next(self.parameters()).device
-        print(current_device)
         context_input = context_input.to(current_device)
         reply_input = reply_input.to(current_device)
 
         context_embed = self.context_encoder.forward(context_input)
         reply_embed = self.reply_encoder.forward(reply_input)
-        print("-----------------")
         return context_embed, reply_embed

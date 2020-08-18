@@ -56,11 +56,9 @@ class ConveRTTrainer:
             self.optimizer.zero_grad()
             context_embed, reply_embed = self.model.forward(feature.context, feature.reply)
             query_reply_similarity = self.criterion.forward(context_embed, reply_embed)
-            print("criterion.forward")
             loss, correct_count, total_count = calculate_query_reply_matching_loss(
                 query_reply_similarity, self.train_config.split_size, self.device_count
             )
-            print("calculate_query_reply_matching_loss")
             accuracy = float(correct_count) / total_count
 
             loss.backward()
@@ -94,4 +92,5 @@ class ConveRTTrainer:
         self.logger.log_eval_step(epoch_id, avg_loss, accuracy)
 
     def save_model(self, epoch_id: int):
-        self.model.to(CPU_DEVICE)
+        # self.model.to(CPU_DEVICE)   # model need to training many epochs
+        pass

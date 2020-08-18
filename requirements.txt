@@ -3,3 +3,4 @@ sklearn
 tensorboard
 sentencepiece
 dataclasses
+pytest

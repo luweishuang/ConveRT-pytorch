@@ -42,7 +42,7 @@ class ConveRTTrainer:
 
     def train(self):
         for epoch_id in range(self.train_config.epochs):
-            print("epoch_id = ", epoch_id)
+            # print("epoch_id = ", epoch_id)
             self.train_epoch(epoch_id)
             self.evaluation(epoch_id)
             self.save_model(epoch_id)
@@ -50,7 +50,7 @@ class ConveRTTrainer:
     def train_epoch(self, epoch_id: int):
         total_steps = len(self.train_dataloader)
         for step_id, feature in enumerate(self.train_dataloader):
-            print("step_id = ", step_id)
+            # print("step_id = ", step_id)
             start_time = time.time()
 
             self.optimizer.zero_grad()
@@ -88,7 +88,7 @@ class ConveRTTrainer:
             total_size += total_count
 
         accuracy = float(total_correct) / total_size
-        print("eval accuracy = %.3f " % accuracy)
+        print("----- eval accuracy = %.3f ------" % accuracy)
         avg_loss = total_loss / total_size
         self.logger.log_eval_step(epoch_id, avg_loss, accuracy)
 

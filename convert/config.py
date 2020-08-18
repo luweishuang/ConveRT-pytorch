@@ -28,4 +28,4 @@ class ConveRTTrainConfig(NamedTuple):
 
     split_size: int = 8
     learning_rate: float = 2e-5
-    epochs: int = 10
+    epochs: int = 50

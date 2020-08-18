@@ -60,7 +60,7 @@ class ConveRTTrainer:
                 query_reply_similarity, self.train_config.split_size, self.device_count
             )
             accuracy = float(correct_count) / total_count
-
+            print("train accuracy = %.3f " % accuracy)
             loss.backward()
             self.optimizer.step()
 
@@ -88,6 +88,7 @@ class ConveRTTrainer:
             total_size += total_count
 
         accuracy = float(total_correct) / total_size
+        print("eval accuracy = %.3f " % accuracy)
         avg_loss = total_loss / total_size
         self.logger.log_eval_step(epoch_id, avg_loss, accuracy)
 

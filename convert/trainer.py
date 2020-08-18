@@ -88,7 +88,7 @@ class ConveRTTrainer:
             total_size += total_count
 
         accuracy = float(total_correct) / total_size
-        print("----- eval accuracy = %.3f ------" % accuracy)
+        print("epoch_id: %d, ----- eval accuracy = %.3f ------" % (epoch_id, accuracy))
         avg_loss = total_loss / total_size
         self.logger.log_eval_step(epoch_id, avg_loss, accuracy)
 

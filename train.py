@@ -94,6 +94,7 @@ def main() -> int:
         device=device,
     )
     trainer.train()
+    torch.save(trainer.model, 'final_model.pkl')
     return 0
 
 

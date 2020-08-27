@@ -18,8 +18,8 @@ class ConveRTTrainConfig(NamedTuple):
 
     model_save_dir: str = "logs/models/"
     log_dir: str = "logs"
-    # device: str = "cuda:0"
-    device: str = "cpu"
+    device: str = "cuda:0"
+    # device: str = "cpu"
     use_data_paraller: bool = True
 
     is_reddit: bool = True
@@ -29,4 +29,4 @@ class ConveRTTrainConfig(NamedTuple):
 
     split_size: int = 8
     learning_rate: float = 2e-5
-    epochs: int = 50
+    epochs: int = 100

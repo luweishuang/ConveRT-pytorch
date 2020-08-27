@@ -28,10 +28,10 @@ class ConveRTCosineLoss(nn.Module):
         :return: computed loss, acc, etc
         :rtype: ConveRTTrainStepOutput
         """
-        assert context_embed.size(0) == reply_embed.size(0)
+        assert context_embed.size(0) == reply_embed.size(0)   # context_embed.size()==(train_batchsize, 1024)
 
         if self.split_size > 1:
-            # print(context_embed.size(0), self.split_size)
+            # print(context_embed.size())
             assert context_embed.size(0) % self.split_size == 0
             context_embed = context_embed.view(context_embed.size(0) // self.split_size, self.split_size, -1)
             reply_embed = reply_embed.view(reply_embed.size(0) // self.split_size, self.split_size, -1)

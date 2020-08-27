@@ -31,6 +31,7 @@ class ConveRTCosineLoss(nn.Module):
         assert context_embed.size(0) == reply_embed.size(0)
 
         if self.split_size > 1:
+            # print(context_embed.size(0), self.split_size)
             assert context_embed.size(0) % self.split_size == 0
             context_embed = context_embed.view(context_embed.size(0) // self.split_size, self.split_size, -1)
             reply_embed = reply_embed.view(reply_embed.size(0) // self.split_size, self.split_size, -1)

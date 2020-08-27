@@ -28,3 +28,7 @@ Junseong Kim (junseong.kim@scatterlab.co.kr)
     url={http://arxiv.org/abs/1911.03688},
 }
 ```
+
+## training experience
+   source config file for training and test the model using the same dataset like "train_dataset_path: str = "data/sample-dataset_train.json", test_dataset_path: str = "data/sample-dataset_val.json"." now we use sample-dataset_train.json and sample-dataset_val.json instead. 
+

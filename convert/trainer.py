@@ -42,7 +42,7 @@ class ConveRTTrainer:
 
     def train(self):
         for epoch_id in range(self.train_config.epochs):
-            # print("epoch_id = ", epoch_id)
+            print("epoch_id = ", epoch_id)
             self.train_epoch(epoch_id)
             self.evaluation(epoch_id)
             self.save_model(epoch_id)
@@ -60,7 +60,7 @@ class ConveRTTrainer:
                 query_reply_similarity, self.train_config.split_size, self.device_count
             )
             accuracy = float(correct_count) / total_count
-            print("train accuracy = %.3f " % accuracy)
+            # print("train accuracy = %.3f " % accuracy)
             loss.backward()
             self.optimizer.step()
 

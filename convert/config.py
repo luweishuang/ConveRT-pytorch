@@ -18,7 +18,8 @@ class ConveRTTrainConfig(NamedTuple):
 
     model_save_dir: str = "logs/models/"
     log_dir: str = "logs"
-    device: str = "cuda:0"
+    # device: str = "cuda:0"
+    device: str = "cpu"
     use_data_paraller: bool = True
 
     is_reddit: bool = True

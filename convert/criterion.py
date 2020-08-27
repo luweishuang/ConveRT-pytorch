@@ -36,7 +36,7 @@ class ConveRTCosineLoss(nn.Module):
             context_embed = context_embed.view(context_embed.size(0) // self.split_size, self.split_size, -1)
             reply_embed = reply_embed.view(reply_embed.size(0) // self.split_size, self.split_size, -1)
 
-        cosine_similarity = torch.matmul(context_embed, reply_embed.transpose(-1, -2))
+        cosine_similarity = torch.matmul(context_embed, reply_embed.transpose(-1, -2))    # shape = (16, 8, 8)
         return cosine_similarity
 
 

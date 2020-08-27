@@ -66,6 +66,7 @@ class ConveRTTrainer:
 
             eta = (int(time.time() - start_time)) * (total_steps - step_id - 1)
             self.logger.log_train_step(epoch_id, step_id, eta, loss, accuracy)
+            print("step_id: %d, ----- train accuracy = %.3f ------" % (step_id, accuracy))
 
     def evaluation(self, epoch_id):
         self.model.eval()

@@ -98,8 +98,8 @@ def load_instances_from_reddit_dataset(dataset_path: str) -> List[DatasetInstanc
     for line in dataset_file:
         example = json.loads(line)
         # context_keys = sorted([key for key in example.keys() if "context" in key])
-        # context_keys = sorted([key for key in example.keys() if "context" in key])[:-1]    # remove context_author key
-        context_keys = sorted([key for key in example.keys() if "context" in key])[0]      # only save the first one
+        context_keys = sorted([key for key in example.keys() if "context" in key])[:-1]    # remove context_author key
+        context_keys = ["context"]      # only save the first one
         instance = DatasetInstance(context=[example[key] for key in context_keys], response=example["response"],)
         instances.append(instance)
     return instances

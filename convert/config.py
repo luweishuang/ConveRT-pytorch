@@ -25,8 +25,8 @@ class ConveRTTrainConfig(NamedTuple):
     is_reddit: bool = True
 
     train_batch_size: int = 64   # 64
-    test_batch_size: int = 24    # 256
+    test_batch_size: int = 16    # 256
 
-    split_size: int = 8
+    split_size: int = 16
     learning_rate: float = 2e-5
     epochs: int = 100
